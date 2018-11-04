@@ -90,3 +90,78 @@ class FeatureNet(object):
         #sparse 4-D tensors : represents point wise concatenated feature
         self.outputs = tf.scatter_nd(
             self.coordinate, voxelwise, [self.batch_size, 10, cfg.INPUT_HEIGHT, cfg.INPUT_WIDTH, 128])
+
+
+
+def build_input(voxel_dictionary):
+    batch_size = len(voxel_dictionary)
+
+    feature_list = []
+    number_list = []
+    coordinate_list = []
+    
+   # extracts feature buffer , number of points in a voxel , and co-ordinate buffer  
+    for i, voxel_dict in zip(range(batch_size), voxel_dictionary):
+        feature_list.append(voxel_dict['feature_buffer'])
+        number_list.append(voxel_dict['number_buffer'])
+        coordinate = voxel_dict['coordinate_buffer']
+        coordinate_list.append(
+            np.pad(coordinate, ((0, 0), (1, 0)),
+                   mode='constant', constant_values=i))
+
+    feature = np.concatenate(feature_list)
+    number = np.concatenate(number_list)
+    coordinate = np.concatenate(coordinate_list)
+    return batch_size, feature, number, coordinate
+
+
+#run the Feature learning network over the GPU and prints the results back 
+def run(batch_size, feature, number, coordinate):
+
+    #setting up gpu optiond to run on 
+    gpu_options = tf.GPUOptions(visible_device_list='1')
+    
+    
+    with tf.Session(config=tf.ConfigProto(tf.ConfigProto(
+        gpu_options=gpu_options,
+        device_count={'GPU': 1}))) as session:
+        
+        #Setting up the Feature Learning Network
+        model = FeatureNet(training=False, batch_size=batch_size)
+        
+        tf.global_variables_initializer().run()
+        for i in range(10):
+            feed = {model.feature: feature,
+                    model.number: number,
+                    model.coordinate: coordinate}
+            outputs = session.run([model.outputs], feed)
+            print(outputs[0].shape)
+
+
+
+def main():
+    
+    #path to the Train , Test , Kitti validation Data
+    data_dir = './data/object/training/voxel'
+    batch_size = 32
+
+    flist = [f for f in os.listdir(data_dir) if f.endswith('npz')]
+
+    #simple dictionary to hold the  data files upto range of batch_size
+    voxel_dictionary = []
+    for id in range(0, len(flist), batch_size):
+        pre_time = time.time()
+        batch_file = [f for f in flist[id:id + batch_size]]
+        voxel_dictionary = []
+        for file in batch_file:
+            voxel_dictionary.append(np.load(os.path.join(data_dir, file)))
+
+        # example input with batch size 16
+        batch_size, feature, number, coordinate = build_input(voxel_dictionary)
+        print(time.time() - pre_time)
+#transforms each raw cloud point, in a batch size of the cloud points, into a vector representation charachterizing the shape informantion 
+    run(batch_size, feature, number, coordinate)
+
+
+if __name__ == '__main__':
+    main()
