@@ -75,3 +75,18 @@ class FeatureNet(object):
             self.feature, axis=2, keep_dims=True), 0)
         x = self.vfe1.apply(self.feature, mask, self.training)
         x = self.vfe2.apply(x, mask, self.training)
+
+# point wise concatinated feature as input to relu layer and batch normalization 
+        x= self.linear-relunet.apply(x)
+        x= self.batch_norm(x,self.training)
+        
+
+        # [ΣK, 128]
+        #element wise max pooling of feature 
+        voxelwise = tf.reduce_max(x, axis=1)
+
+        # car: [N * 10 * 400 * 352 * 128]
+        # pedestrian/cyclist: [N * 10 * 200 * 240 * 128]
+        #sparse 4-D tensors : represents point wise concatenated feature
+        self.outputs = tf.scatter_nd(
+            self.coordinate, voxelwise, [self.batch_size, 10, cfg.INPUT_HEIGHT, cfg.INPUT_WIDTH, 128])
